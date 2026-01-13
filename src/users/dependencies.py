@@ -1,7 +1,7 @@
-from users.client import FirstService1Client
+from users.client import ServiceClient
 from users.service import UserService
 
 
 def get_user_service() -> UserService:
-    client = FirstService1Client()
+    client = ServiceClient()
     return UserService(client)

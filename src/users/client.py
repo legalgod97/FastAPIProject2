@@ -1,33 +1,82 @@
+from http import HTTPStatus
+from uuid import UUID
+
 import httpx
-
-from users.exceptions import ServiceRequestError
+import ujson
+from users.exceptions import TransientServiceError, PermanentServiceError, NotFoundError
 from session import settings
-
 from src.utils.retry import retry_async
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-class FirstService1Client:
+HTTP_TIMEOUT = httpx.Timeout(
+    connect=1.0,
+    read=3.0,
+    write=3.0,
+    pool=1.0,
+)
+
+
+class ServiceClient:
     def __init__(self):
         self._client = httpx.AsyncClient(
             base_url=settings.service1_base_url,
-            timeout=5.0,
+            timeout=HTTP_TIMEOUT,
         )
 
     @retry_async(
         attempts=3,
-        retry_exceptions=(httpx.RequestError, ServiceRequestError),
+        retry_exceptions=(
+                httpx.RequestError,
+                TransientServiceError,
+        ),
     )
-    async def get_entity(self, entity_id: int) -> dict:
+    async def get_entity(self, entity_id: UUID) -> dict:
         response = await self._client.get(f"/entities/{entity_id}")
 
-        if response.status_code != 200:
-            raise ServiceRequestError(response.status_code)
+        status = response.status_code
 
-        return response.json()
+        if status == HTTPStatus.OK:
+            return ujson.loads(response.text)
+
+        if status == HTTPStatus.NOT_FOUND:
+            logger.info(
+                "Entity not found in service",
+                extra={"entity": "Entity", "entity_id": entity_id},
+            )
+            raise NotFoundError(entity="Entity", entity_id=entity_id)
+
+        if HTTPStatus.INTERNAL_SERVER_ERROR <= status:
+            logger.warning(
+                "Transient error while getting entity",
+                extra={"status": status, "entity_id": entity_id},
+            )
+            raise TransientServiceError(
+                message="Transient error while getting entity",
+                status_code=status,
+            )
+
+        logger.error(
+            "Permanent error while getting entity",
+            extra={
+                "status": status,
+                "entity_id": entity_id,
+                "response_snippet": response.text[:500],
+            },
+        )
+        raise PermanentServiceError(
+            message="Permanent error while getting entity",
+            status_code=status,
+        )
 
     @retry_async(
         attempts=3,
-        retry_exceptions=(httpx.RequestError, ServiceRequestError),
+        retry_exceptions=(
+                httpx.RequestError,
+                TransientServiceError,
+        ),
     )
     async def create_entity(self, payload: dict) -> dict:
         response = await self._client.post(
@@ -35,7 +84,32 @@ class FirstService1Client:
             json=payload,
         )
 
-        if response.status_code != 200:
-            raise ServiceRequestError(response.status_code)
+        status = response.status_code
 
-        return response.json()
+        if HTTPStatus.OK <= status < HTTPStatus.BAD_REQUEST:
+            return ujson.loads(response.text)
+
+        if HTTPStatus.INTERNAL_SERVER_ERROR <= status:
+            logger.warning(
+                "Transient error while creating entity",
+                extra={
+                    "status": status,
+                    "entity_id": payload.get("id"),
+                },
+            )
+            raise TransientServiceError(
+                message="Transient error while creating entity",
+                status_code=status,
+            )
+
+        logger.error(
+            "Permanent error while creating entity",
+            extra={
+                "status": status,
+                "response": response.text,
+            },
+        )
+        raise PermanentServiceError(
+            message="Permanent error while creating entity",
+            status_code=status,
+        )
