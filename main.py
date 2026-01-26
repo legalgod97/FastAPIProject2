@@ -7,10 +7,11 @@ from processed.repository import ProcessedMessageRepository
 import contextlib
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
+from src.users.router import router
 
 settings = get_settings()
 
-engine = create_async_engine(settings.database_url, echo=False)
+engine = create_async_engine(settings.postgres_url, echo=False)
 async_session_factory = async_sessionmaker(
     engine,
     expire_on_commit=False,
@@ -40,6 +41,9 @@ async def lifespan_handler(application: FastAPI):
             await consumer_task
 
 app = FastAPI(lifespan=lifespan_handler)
+
+
+app.include_router(router)
 
 @app.get("/")
 async def root():
