@@ -1,9 +1,9 @@
 from datetime import datetime, UTC
 
 from sqlalchemy import String, DateTime
-from sqlalchemy.orm import Mapped, mapped_column, declarative_base
+from sqlalchemy.orm import Mapped, mapped_column
 
-Base = declarative_base()
+from users.models import Base
 
 
 class ProcessedMessage(Base):
