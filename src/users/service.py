@@ -18,18 +18,12 @@ class UserService:
 
         merged_data = {**api_data, **payload.model_dump()}
 
-        merged_data["extra_field_1"] = f"enriched_{merged_data['extra_field_1']}"
-        merged_data["extra_field_2"] = merged_data["extra_field_2"] * 10
-        merged_data["enriched_value"] = f"{merged_data['name']}_{merged_data['extra_field_1']}"
-        merged_data["computed"] = len(merged_data["name"])
+        merged_data["status_tag"] = f"enriched_{merged_data['status_tag']}"
+        merged_data["score"] = merged_data["score"] * 10
+        merged_data["enriched_value"] = f"{merged_data['name']}_{merged_data['status_tag']}"
+        merged_data["name_length"] = len(merged_data["name"])
 
-        user_model = UserModel(
-            id=merged_data["id"],
-            name=merged_data["name"],
-            extra_field_1=merged_data["extra_field_1"],
-            extra_field_2=merged_data["extra_field_2"],
-            enriched_value=merged_data["enriched_value"],
-        )
+        user_model = UserModel.from_dict(merged_data)
 
         await self._repo.create(user_model)
 
@@ -49,8 +43,8 @@ class UserService:
             db_data = {
                 "id": db_model.id,
                 "name": db_model.name,
-                "extra_field_1": db_model.extra_field_1,
-                "extra_field_2": db_model.extra_field_2,
+                "status_tag": db_model.status_tag,
+                "score": db_model.score,
             }
 
         merged_data = {**db_data, **api_data}

@@ -1,7 +1,9 @@
-import json
+import ujson
 from aiokafka import AIOKafkaConsumer
+from sqlalchemy.exc import DatabaseError
 
-from messaging.exceptions import ConsumerError
+from messaging.exceptions import InvalidMessageError
+from messaging.schemas import DlqMessage
 
 
 class KafkaConsumerRunner:
@@ -30,14 +32,35 @@ class KafkaConsumerRunner:
         await self.consumer.start()
         try:
             async for msg in self.consumer:
-                await self._process_message(msg)
+                await self._process_message(
+                    msg,
+                    topic=msg.topic,
+                    offset=msg.offset,
+                )
         finally:
             await self.consumer.stop()
 
-    async def _process_message(self, msg) -> None:
+    async def _process_message(
+            self,
+            msg,
+            *,
+            topic: str,
+            offset: int,
+    ) -> None:
         try:
-            payload = json.loads(msg.value.decode())
-            event_id = payload["message_id"]
+            try:
+                raw = msg.value.decode()
+            except UnicodeDecodeError as exc:
+                raise InvalidMessageError("Invalid UTF-8 payload") from exc
+
+            try:
+                payload = ujson.loads(raw)
+            except ValueError as exc:
+                raise InvalidMessageError("Invalid JSON payload") from exc
+
+            event_id = payload.get("message_id")
+            if not event_id:
+                raise InvalidMessageError("Missing 'message_id'")
 
             if await self.processed_repo.exists(event_id):
                 await self.consumer.commit()
@@ -47,13 +70,21 @@ class KafkaConsumerRunner:
 
             await self.consumer.commit()
 
-        except ConsumerError as exc:
+        except InvalidMessageError as exc:
             if self.dlq_producer and self.dlq_topic:
-                await self.dlq_producer.publish(
-                    self.dlq_topic,
-                    {
-                        "error": str(exc),
-                        "raw": msg.value.decode(errors="ignore"),
-                    },
+                dlq_msg = DlqMessage(
+                    error=exc.detail,
+                    topic=topic,
+                    offset=offset,
+                    raw_value=msg.value.decode(errors="ignore"),
                 )
-                await self.consumer.commit()
+                await self.dlq_producer.publish(
+                    topic=self.dlq_topic,
+                    payload=dlq_msg.model_dump(),
+                    key=str(offset),
+                )
+            else:
+                raise
+
+        except DatabaseError:
+            raise

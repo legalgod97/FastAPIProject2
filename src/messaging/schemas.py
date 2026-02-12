@@ -1,4 +1,5 @@
 from datetime import datetime, UTC
+from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
 
@@ -14,3 +15,10 @@ class UserUpdatedEvent(BaseEvent):
 
     user_id: UUID
     name: str
+
+
+class DlqMessage(BaseModel):
+    error: str
+    topic: str
+    offset: int
+    raw_value: Optional[str] = None

@@ -12,16 +12,16 @@ from users.service import UserService
 async def test_create_user_success(user_service):
     payload = UserCreate(
         name="John",
-        extra_field_1="value",
-        extra_field_2=42,
+        status_tag="value",
+        score=42,
     )
 
     user = await user_service.create_user(payload)
 
     assert user.id is not None
     assert user.name == "John"
-    assert user.extra_field_1 == "enriched_value"
-    assert user.extra_field_2 == 420
+    assert user.status_tag == "enriched_value"
+    assert user.score == 420
     assert user.enriched_value == "John_enriched_value"
 
 

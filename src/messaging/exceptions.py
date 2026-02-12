@@ -23,7 +23,7 @@ class AlreadyProcessedError(ConsumerError):
         super().__init__(f"Message '{message_id}' already processed")
 
 
-class ProcessingError(ConsumerError):
+class InvalidMessageError(Exception):
     def __init__(self, detail: str):
         self.detail = detail
-        super().__init__(f"Processing error: {detail}")
+        super().__init__(f"Invalid message: {detail}")
